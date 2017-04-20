@@ -6,12 +6,13 @@ import time
 
 def createConfig():
 	steamid64 = raw_input("Please enter the steamid64 of the player for the timelapse: ")
-	demoinfogo_Path = raw_input("Please enter your demoinfogo.exe path: ")
+	demoinfogoPath = raw_input("Please enter your demoinfogo.exe path: ")
+	csgoPath = raw_input("Please enter your csgo.exe path: ")
 	config = ConfigParser.SafeConfigParser()
 	config.add_section('CsHGSettings')
 	config.set('CsHGSettings', 'steamid64', steamid64)
-	config.set('CsHGSettings', 'demoinfogo_Path', demoinfogo_Path)
-
+	config.set('CsHGSettings', 'demoinfogo_path', demoinfogoPath)
+	config.set('CsHGSettings', 'csgo_path', csgoPath)
 	with open('CsHG.cfg', 'wb') as configfile:
 		config.write(configfile)
 
@@ -20,8 +21,9 @@ def loadConfig():
 	try:
 		config.read('CsHG.cfg')
 		steamid64 = config.get('CsHGSettings','steamid64')
-		demoinfogoPath = config.get('CsHGSettings', 'demoinfogo_Path')
-		return steamid64, demoinfogoPath
+		demoinfogoPath = config.get('CsHGSettings', 'demoinfogo_path')
+		csgoPath = config.get('CsHGSettings', 'csgo_path')
+		return steamid64, demoinfogoPath, csgoPath
 	except ConfigParser.NoOptionError:
 		print "Error while reading the config file. Try deleting CsHG.cfg and restarting."
 		exit()
@@ -65,6 +67,15 @@ def analyzeDemo(demopath):
 	print "Last tick: " + str(lastTick)
 	return kills
 
+def runCSGOCommand(command, csgoPath):
+	if type(command) is str:
+		process = Popen([csgoPath[1:-1], "-hijack", command],stdout=PIPE)
+	else:	
+		command.insert(0,"-hijack")
+		command.insert(0,csgoPath[1:-1])
+		process = Popen(command,stdout=PIPE)	
+
+#########################################################################
 
 if os.path.isfile('CsHG.cfg'):
 	print "Found config, loading."
@@ -72,22 +83,27 @@ else:
 	print "Found no config, creating one."
 	createConfig()
 
-steamid64, demoinfogoPath = loadConfig()
+steamid64, demoinfogoPath, csgoPath = loadConfig()
 print "steamid64 = " + steamid64 + "; demoinfogoPath = " +  demoinfogoPath;
 
-demopath = "E:\\Program Files (x86)\\Steam\\SteamApps\\common\\Counter-Strike Global Offensive - replays and screenshots\\csgo\\replays\\match730_003205395876109353290_2111552552_131.dem"
+demopath = "E:\\Program Files (x86)\\Steam\\SteamApps\\common\\Counter-Strike Global Offensive - replays and screenshots\\csgo\\replays\\match730_003205395876109353290_2111552552_131.dem" #todo make configurable
 kills = analyzeDemo(demopath)
 print "Kills = " + str(kills)
-csgoPath = "E:\Program Files (x86)\Steam\SteamApps\common\Counter-Strike Global Offensive\csgo.exe"
-process = Popen([csgoPath,"-hijack", "+playdemo",demopath],stdout=PIPE)	
+print "Loading demo..."
+runCSGOCommand("+playdemo " + demopath,csgoPath)	
+print "Waiting 15 seconds..."
 time.sleep(15)
 for kill in kills:	
-	process = Popen([csgoPath,"-hijack", "+demo_pause "],stdout=PIPE)
+	print "Pausing demo"
+	runCSGOCommand("+demo_pause",csgoPath)
 	time.sleep(1)
-	process = Popen([csgoPath,"-hijack", "+demo_gototick", str(kill-1500)],stdout=PIPE)
-	time.sleep(5)
-	process = Popen([csgoPath,"-hijack", "+spec_player_by_accountid",steamid64],stdout=PIPE)	
+	print "Skipping to tick " + str(kill)
+	runCSGOCommand(["+demo_gototick", str(kill-1600)],csgoPath)
 	time.sleep(1)
-	process = Popen([csgoPath,"-hijack", "+demo_resume "],stdout=PIPE)
+	print "Spectating player"
+	runCSGOCommand(["+spec_player_by_accountid", steamid64],csgoPath)	
+	time.sleep(1)
+	print "Resuming demo"
+	runCSGOCommand("+demo_resume",csgoPath)
 	time.sleep(3)
-	process = Popen([csgoPath,"-hijack", "+demo_pause "],stdout=PIPE)
+runCSGOCommand("+disconnect",csgoPath)

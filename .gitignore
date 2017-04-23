@@ -1,4 +1,5 @@
 *.bat
+*.cfg
 testing/
 !CsHG.bat
 

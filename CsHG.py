@@ -1,4 +1,5 @@
-analyzeOnly = False
+analyzeOnly = True
+numOfThreads = 4
 recording = False
 wallbangsOnly = True
 shutdownAfterFinish = False
@@ -18,6 +19,8 @@ from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
 import sys
 import json
 import threading
+from threading import Lock
+import Queue
 
 def createConfig():
 	steamid64 = raw_input("Please enter the steamid64 of the player for the timelapse: ")
@@ -61,8 +64,11 @@ def analyzeDemo(demopath):
 	totalDeaths = 0
 	usernameKills = 0
 	kills = []
-	warmup=True;
+	wallbangs = []
+	headshots = []
+	warmup=True
 	wasWallbang=False
+	wasHeadshot=False
 	kill=False
 	firstTick = 99999999
 	for line in process.stdout:
@@ -96,21 +102,28 @@ def analyzeDemo(demopath):
 		elif "player_death" in line:
 			for line in process.stdout:
 				if "}" in line:
-					if not warmup and kill and (wasWallbang or not wallbangsOnly):  #we are only interested in kills outside of warmup
+					if not warmup and kill:  #we are only interested in kills outside of warmup
+						if wasWallbang:
+							wallbangs.append(lastTick)
+						if wasHeadshot:
+							headshots.append(lastTick)
 						usernameKills = usernameKills + 1
 						#print "Killed by " + username + " at tick " + str(lastTick)
 						kills.append(lastTick)
 					kill=False
 					wasWallbang=False
+					wasHeadshot=False
 					break
 				elif "attacker: "+ username in line:
 					kill=True					
 				elif "penetrated: 1" in line: #penetrated: 1 for wallbangs
 					wasWallbang=True
+				elif "headshot: 1" in line:
+					wasHeadshot=True
 	#print "Total kills: " + str(usernameKills) 
 	#print "First tick: " + str(firstTick)
 	#print "Last tick: " + str(lastTick)
-	return kills, firstTick
+	return kills, firstTick, wallbangs, headshots
 
 def runCSGOCommand(command, csgoPath):
 	if type(command) is str:
@@ -192,7 +205,7 @@ def demoDebug(message):
 def viewDemos():
 	totalKills = 0
 	for demo in demofiles:
-		kills, firstTick = analyzeDemo(join(demopath,demo))
+		kills, firstTick, wallbangs, headshots = analyzeDemo(join(demopath,demo))
 		totalKills = totalKills + len(kills)
 		print "totalKills: "+ str(totalKills) + " Kills = " + str(kills) + " ("+ str(demofiles.index(demo)+1) + "/" + str(len(demofiles)) + ")Demo: " + demo
 		if len(kills) != 0:
@@ -235,16 +248,77 @@ def viewDemos():
 			demoDebug("Exiting demo...")
 			runCSGOCommand("+disconnect",csgoPath)
 
+class demoInfo:
+	demoName = "unknown";
+	kills = []
+	wallbangs = []
+	headshots = []
+	firstTick = 0
+	def __init__(self, _demoname, _kills, _firstick, _wallbangs, _headshots):
+		self.demoName = _demoname
+		self.kills = _kills
+		self.firstTick = _firstick
+		self.wallbangs = _wallbangs
+		self.headshots = _headshots
+
+	def __str__(self):
+		return json.dumps({self.demoName:{"firstTick": self.firstTick, "kills":self.kills, "wallbangs":self.wallbangs, "headshots":self.headshots}}, sort_keys=True, indent=4, separators=(',', ': '))
+
+	def __lt__(self, other):
+		return self.demoName < other.demoName
+
+def analyzeAndPrintDemo(demofiles):
+	while True:
+		demo = q.get()
+		global totalKills
+		print "("+ str(demofiles.index(demo)+1) + "/" + str(len(demofiles)) + ")Demo: " + demo+ "\n"
+		kills, firstTick, wallbangs, headshots = analyzeDemo(join(demopath,demo))
+		demoinfo = demoInfo(demo, kills, firstTick, wallbangs, headshots)
+		print str(demoinfo)
+		lock.acquire()
+		try:	
+			totalKills = totalKills + len(kills)
+			demoinfos.append(demoinfo)
+			print "("+ str(demofiles.index(demo)+1) + "/" + str(len(demofiles)) + ")Demo kills: " + str(len(kills)) + " totalKills: " + str(totalKills) + "\n"
+		finally:
+			lock.release()
+		q.task_done()
+
+class demoInfoEncoder(json.JSONEncoder):
+	def default(self, obj):
+		if isinstance(obj, demoInfo): 
+			return {"demoFile":obj.demoName,"firstTick": obj.firstTick, "kills":obj.kills}
+		return json.JSONEncoder.default(self, obj)
+
+def loadJson():
+	print "loading json"
+	if not os.path.isfile("CsHG.json"):
+		file = open("CsHG.json", "w+")
+		file.writelines(json.dumps({steamid64:{}}, sort_keys=True, indent=4, separators=(',', ': '), cls=demoInfoEncoder))
+		file.close()
+	with open("CsHG.json") as f:
+		jsonData = json.load(f)
+	return jsonData
+
+def saveJson(demoinfosloaded, demoinfos):
+	for demoinfo in demoinfos:
+		demosinfosloaded[steamid64][demoinfo.demoName] = {}
+		demosinfosloaded[steamid64][demoinfo.demoName]['firstTick'] = demoinfo.firstTick
+		demosinfosloaded[steamid64][demoinfo.demoName]["kills"] = []
+		demosinfosloaded[steamid64][demoinfo.demoName]["wallbangs"] = []
+		demosinfosloaded[steamid64][demoinfo.demoName]["headshots"] = []
+		for kill in demoinfo.kills:
+			demosinfosloaded[steamid64][demoinfo.demoName]["kills"].append(kill)
+		for wallbang in demoinfo.wallbangs:
+			demosinfosloaded[steamid64][demoinfo.demoName]["wallbangs"].append(wallbang)
+		for headshot in demoinfo.headshots:
+			demosinfosloaded[steamid64][demoinfo.demoName]["headshots"].append(headshot)
+	with open("CsHG.json", "w+") as f:
+		f.writelines(json.dumps(demosinfosloaded,sort_keys=True, indent=4, separators=(',', ': '), cls=demoInfoEncoder))
+
 #####################################################################################
 
 steamid64, demoinfogoPath, csgoPath = getConfig()
-
-#demopath = "E:\\Program Files (x86)\\Steam\\SteamApps\\common\\Counter-Strike Global Offensive - replays and screenshots\\csgo\\replays\\match730_003205395876109353290_2111552552_131.dem" #todo make configurable
-#demopath = "E:\\Program Files (x86)\\Steam\\SteamApps\\common\\Counter-Strike Global Offensive - replays and screenshots\\csgo\\replays\\match730_003049383948598640776_0279539867_136.dem" #todo make configurable
-demopath = "E:\\Program Files (x86)\\Steam\\SteamApps\\common\\Counter-Strike Global Offensive - replays and screenshots\\csgo\\replays\\match730_003038239255789830182_0161544285_135.dem"
-#kills, firstTick = analyzeDemo(demopath)
-#kills = [50422, 104205, 107647, 118102, 128610, 135671, 138697, 144274, 158406, 161902, 165446] # for faster debugging/testing
-
 
 demopath = "E:\\Program Files (x86)\\Steam\\SteamApps\\common\\Counter-Strike Global Offensive - replays and screenshots\\csgo\\replays\\" #todo make configurable
 demofiles = [f for f in listdir(demopath) if isfile(join(demopath, f)) and ".dem" == f[-4:]]
@@ -261,10 +335,37 @@ if not analyzeOnly:
 	runCSGOCommand("+snd_musicvolume 0", csgoPath)
 	runCSGOCommand("+sv_cheats 1", csgoPath)
 	runCSGOCommand("+snd_setmixer Dialog vol 0", csgoPath)
+	runCSGOCommand("+engine_no_focus_sleep 0", csgoPath)
+	runCSGOCommand("+snd_mute_losefocus 0", csgoPath)
 	viewDemos()
 
 if analyzeOnly:
-	pass	#todo multithreaded analyze to a file for later use
+	totalKills = 0
+	demoinfos = []
+	q = Queue.Queue()
+	lock = Lock()
+	for i in range(numOfThreads):
+		t = threading._start_new_thread(analyzeAndPrintDemo, (demofiles,))
+	
+	demosinfosloaded = loadJson()
+	
+	alreadyAnalysed = []
+	for key in demosinfosloaded[steamid64]:
+		print key 
+		#if key == steamid64:
+		alreadyAnalysed.append(key)
+	
+	for demo in demofiles:
+		if alreadyAnalysed.count(demo) == 0:
+			q.put(demo)
+
+	q.join()			
+		
+	saveJson(demosinfosloaded, demoinfos)
+
+	for key, value in demosinfosloaded.items():
+		print key, value
+		
 
 threading._shutdown()
 if shutdownAfterFinish:

@@ -17,6 +17,7 @@ Using a collection of demos, this python2.7 program scans through each demo with
 * If not already installed, run ```pip install pypiwin32``` to install pypiwin32
 * Install OBS Studo and Counter Strike: Global Offensive
 * Set-up OBS Studio's hotkeys so that Page-Down->Start Recording & Page-Up->Stop Recording
+* Copy [gamestate_integration_CsHG.cfg](csgo/cfg/gamestate_integration_CsHG.cfg) to CSGO's config folder. (csgo/cfg/)
 * Edit the CsHG.py top configuration settings to match what you want to do
 * Run CSGO in windowed mode
 * Run CsHG.bat, enter the configuration questions.

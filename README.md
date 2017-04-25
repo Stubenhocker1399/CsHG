@@ -8,10 +8,21 @@ Using a collection of demos, this python2.7 program scans through each demo with
 * [Counter Strike: Global Offensive](https://store.steampowered.com/app/730/)
 * [csgo-demoinfo](https://github.com/ValveSoftware/csgo-demoinfo)
 * [OBS Studio](https://github.com/jp9000/obs-studio)
+* [pypiwin32](https://pypi.python.org/pypi/pypiwin32)
 
 
 ## Installation
-> todo
+* Clone this repository
+* Compile csgo-demoinfo to get its executable
+* If not already installed, run ```pip install pypiwin32``` to install pypiwin32
+* Install OBS Studo and Counter Strike: Global Offensive
+* Set-up OBS Studio's hotkeys so that Page-Down->Start Recording & Page-Up->Stop Recording
+* Edit the CsHG.py top configuration settings to match what you want to do
+* Run CSGO in windowed mode
+* Run CsHG.bat, enter the configuration questions.
+* ???
+* Profit
+
 
 ## Example Video
 

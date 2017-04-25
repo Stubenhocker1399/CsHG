@@ -172,8 +172,8 @@ def findProcessByName(name):
 			break
 	return PID
 
-def checkOBS():
-	findProcessByName(["obs32.exe","obs64.exe"])
+def checkOBS(recording):
+	obsPID = findProcessByName(["obs32.exe","obs64.exe"])
 	if obsPID != -1:
 		print "OBSPID found: " + str(obsPID) + " Recording: " + str(recording) + " (Don't forget to setup the hotkeys: Page-Down=>Start Recording & Page-Up=>Stop Recording)"
 	else:
@@ -253,7 +253,7 @@ print len(demofiles)
 CSGOGamestatePostEvent = threading.Event()
 threading._start_new_thread(startGameStateServer, ())
 
-obsPID = checkOBS()
+obsPID = checkOBS(recording)
 	
 if not analyzeOnly:
 	runCSGOCommand("+snd_musicvolume 0", csgoPath)

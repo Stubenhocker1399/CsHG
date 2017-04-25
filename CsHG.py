@@ -12,6 +12,7 @@ from os.path import isfile, join
 import subprocess
 from subprocess import Popen, PIPE
 import time
+import win32com
 import win32com.client as comctl
 from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
 import sys
@@ -253,6 +254,7 @@ print len(demofiles)
 CSGOGamestatePostEvent = threading.Event()
 threading._start_new_thread(startGameStateServer, ())
 
+wsh = win32com.client.Dispatch("WScript.Shell")
 obsPID = checkOBS(recording)
 	
 if not analyzeOnly:

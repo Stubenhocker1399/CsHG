@@ -75,38 +75,38 @@ def analyzeDemo(demopath):
 	kill=False
 	firstTick = 99999999
 	for line in process.stdout:
-		if "tick:" in line:
+		if "tick:" == line[:5]:
 			lastTick= int(line[6:])
 			if lastTick<firstTick:
 				firstTick = lastTick
 				#print "Tick: " + str(lastTick) + " FirstTick: " + str(firstTick)
 		#elif "player info" in line: #not in every demo
-		elif "adding:player" in line:
+		elif "adding:player" == line[:13]:
 			for line in process.stdout:
 		#		if "}" in line:
-				if "filesDownloaded" in line: #lazy end of adding player info
+				if " filesDownloaded" == line[:16]: #lazy end of adding player info
 					if lastXuid == steamid64:
 						username = lastName
 						userID = lastUserID
 						#print "Found our player " + username + " with steamid64 " + steamid64 + "  and userID " + userID
 					#print "Found player " + lastName + " with steamid64 " + lastXuid + " and userID " + lastUserID 
 					break
-				elif "name:" in line:
+				elif " name:" == line[:6]:
 					lastName = line[6:-2]
-				elif "xuid:" in line:
+				elif " xuid:" == line[:6]:
 					lastXuid = line[6:-2]
-				elif "userID:" in line:
+				elif " userID:" in line[:8]:
 					lastUserID = line[8:-2]
-		elif "CCSUsrMsg_WarmupHasEnded" in line:
+		elif "---- CCSUsrMsg_WarmupHasEnded" == line[:29]:
 			#print "Warmup end."
 			if lastUserID == -1: #our user user hasn't been found 
 				break;
 			warmup=False;
-		elif "player_death" in line:
+		elif "player_death" == line[:12]:
 			killedTeam = 0
 			killerTeam = 0
 			for line in process.stdout:
-				if "}" in line:
+				if "}" == line[:1]:
 					if not warmup and kill:  #we are only interested in kills outside of warmup
 						if wasWallbang:
 							wallbangs.append(lastTick)
@@ -122,27 +122,27 @@ def analyzeDemo(demopath):
 					wasHeadshot = False
 					wasTeamkill = False
 					break
-				elif "attacker: "+ username in line:
+				elif " attacker: "+ username == line[:len(" attacker: "+ username)]:
 					kill=True
 					for line in process.stdout:
-						if "team: CT" in line:
+						if "  team: CT" == line[:10]:
 							killerTeam = 1
 							break
-						elif "team: T" in line:
+						elif "  team: T" == line[:9]:
 							killerTeam = 2
 							break
 					if killedTeam == killerTeam:
 						wasTeamkill = True
-				elif "penetrated: 1" in line: #penetrated: 1 for wallbangs
+				elif " penetrated: 1" == line[:14]: #penetrated: 1 for wallbangs
 					wasWallbang=True
-				elif "headshot: 1" in line:
+				elif " headshot: 1" == line[:12]:
 					wasHeadshot=True
-				elif "userid" in line:
+				elif " userid" == line[:7]:
 					for line in process.stdout:
-						if "team: CT" in line:
+						if "  team: CT" == line[:10]:
 							killedTeam = 1
 							break
-						elif "team: T" in line:
+						elif "  team: T" == line[:9]:
 							killedTeam = 2
 							break
 	#print "Total kills: " + str(usernameKills) 
@@ -304,8 +304,6 @@ def analyzeAndPrintDemo(demofiles):
 		global totalKills
 		print "("+ str(demofiles.index(demo)+1) + "/" + str(len(demofiles)) + ")Demo: " + demo+ "\n"
 		kills, firstTick, wallbangs, headshots, teamkills = analyzeDemo(join(demopath,demo))
-		if len(teamkills) != 0:
-			print "###########("+ str(demofiles.index(demo)+1) + "/" + str(len(demofiles)) + ")Demo: " + demo + " Teamkills: " + str(len(teamkills)) + "\n"
 		demoinfo = demoInfo(demo, kills, firstTick, wallbangs, headshots, teamkills)
 		print str(demoinfo)
 		lock.acquire()
@@ -401,7 +399,6 @@ if analyzeOnly:
 
 	for key, value in demosinfosloaded.items():
 		print key, value
-		
 
 threading._shutdown()
 if shutdownAfterFinish:

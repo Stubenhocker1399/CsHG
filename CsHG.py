@@ -1,6 +1,6 @@
-analyzeOnly = True
+analyzeOnly = False
 numOfThreads = 4
-recording = False
+recording = True
 wallbangsOnly = False
 teamkillsOnly = True
 shutdownAfterFinish = False
@@ -198,7 +198,7 @@ def startGameStateServer():
 
 def waitForCsgoPost(amount = 1):
 	for i in range(0,amount):
-		print "Wait for csgoPost " + str(i + 1) + " out of " + str(amount)
+		#print "Wait for csgoPost " + str(i + 1) + " out of " + str(amount)
 		CSGOGamestatePostEvent.wait()
 		#print "Got      csgoPost"
 
@@ -227,55 +227,51 @@ def demoDebug(message):
 	if debugDemoViewing:
 		print message
 
-def viewDemos():
-	totalKills = 0
-	for demo in demofiles:
-		kills, firstTick, wallbangs, headshots, teamkills = analyzeDemo(join(demopath,demo))
-		if teamkillsOnly:
-			kills = teamkills
-		if wallbangsOnly:
-			kills = wallbangs
-		totalKills = totalKills + len(kills)
-		print "totalKills: "+ str(totalKills) + " Kills = " + str(kills) + " ("+ str(demofiles.index(demo)+1) + "/" + str(len(demofiles)) + ")Demo: " + demo
-		if len(kills) != 0:
-		
-			demoDebug("Loading demo...")
-			runCSGOCommand(["+playdemo", join(demopath,demo)],csgoPath)	
-			demoDebug("Waiting for 20 ticks")
-			waitForCsgoPost(20)
-			time.sleep(1)
-			runCSGOCommand("+sv_cheats 1", csgoPath)
-			runCSGOCommand("+mp_teamcashawards 0", csgoPath)
-			runCSGOCommand("+mp_playercashawards 0", csgoPath)
-			#todo diable afterround messages
-			for kill in kills:
-				if recording:
-					wsh.SendKeys("{PGUP}")
-				demoDebug("Kill " + str(kills.index(kill)+1) + " out of " + str(len(kills)))
-				demoDebug("Pausing demo")
-				runCSGOCommand("+demo_pause",csgoPath)
-				time.sleep(0.1) #sleep at least more than one tick
-				demoDebug("Skipping to tick " + str(kill))
-				runCSGOCommand(["+demo_gototick", str(kill-firstTick-129)],csgoPath)
-				#time.sleep(1)
-				waitForCsgoPost()
-				runCSGOCommand("+cl_draw_only_deathnotices 1", csgoPath)
-				time.sleep(1)#(0.2)
-				runCSGOCommand("+cl_draw_only_deathnotices 0", csgoPath)#enable and disabling hides the spectator gui
-				demoDebug("Spectating player")
-				runCSGOCommand(["+spec_player_by_accountid", steamid64, "+firstperson"],csgoPath)#todo find a better way
-				time.sleep(1)#(0.3)
-				demoDebug("Resuming demo")
-				runCSGOCommand("+demo_resume",csgoPath)
-				wsh.AppActivate(obsPID)
-				time.sleep(1)
-				if recording:
-					wsh.SendKeys("{PGDN}")
-				time.sleep(2)
-			if recording:
-					wsh.SendKeys("{PGUP}")
-			demoDebug("Exiting demo...")
-			runCSGOCommand("+disconnect",csgoPath)
+def viewDemo(demo, firstTick, kills):
+	demoDebug("Loading demo...")
+	runCSGOCommand(["+playdemo", join(demopath,demo)],csgoPath)	
+	demoDebug("Waiting for 20 ticks")
+	waitForCsgoPost(100)
+	time.sleep(1)
+	runCSGOCommand("+sv_cheats 1", csgoPath)
+	runCSGOCommand("+mp_teamcashawards 0", csgoPath)
+	runCSGOCommand("+mp_playercashawards 0", csgoPath)
+	#todo diable afterround messages
+	for kill in kills:
+		if recording:
+			wsh.SendKeys("{PGUP}")
+		demoDebug("Kill " + str(kills.index(kill)+1) + " out of " + str(len(kills)))
+		demoDebug("Pausing demo")
+		runCSGOCommand("+demo_pause",csgoPath)
+		time.sleep(0.1) #sleep at least more than one tick
+		demoDebug("Skipping to tick " + str(kill))
+		runCSGOCommand(["+demo_gototick", str(kill-firstTick-129-(32*4))],csgoPath)
+		#time.sleep(1)
+		waitForCsgoPost()
+		runCSGOCommand("+cl_draw_only_deathnotices 1", csgoPath)
+		time.sleep(1)#(0.2)
+		runCSGOCommand("+cl_draw_only_deathnotices 0", csgoPath)#enable and disabling hides the spectator gui
+		demoDebug("Spectating player")
+		runCSGOCommand(["+spec_player_by_accountid", steamid64, "+firstperson"],csgoPath)#todo find a better way
+		time.sleep(1)#(0.3)
+		runCSGOCommand("+stopsound",csgoPath)
+		demoDebug("Resuming demo")
+		runCSGOCommand("+demo_resume",csgoPath)
+		waitForCsgoPost(20)
+		runCSGOCommand("+demo_pause",csgoPath)	
+		time.sleep(0.1) #sleep at least more than one tick
+		runCSGOCommand("+demo_resume",csgoPath)
+		waitForCsgoPost()
+		wsh.AppActivate(obsPID)
+		time.sleep(1)
+		if recording:
+			wsh.SendKeys("{PGDN}")
+		time.sleep(7)
+		if recording:
+				wsh.SendKeys("{PGUP}")
+	demoDebug("Exiting demo...")
+	runCSGOCommand("+stopdemo",csgoPath)
+	time.sleep(3)
 
 class demoInfo:
 	demoName = "unknown";
@@ -333,21 +329,22 @@ def loadJson():
 
 def saveJson(demoinfosloaded, demoinfos):
 	for demoinfo in demoinfos:
-		demosinfosloaded[steamid64][demoinfo.demoName] = {}
-		demosinfosloaded[steamid64][demoinfo.demoName]['firstTick'] = demoinfo.firstTick
-		demosinfosloaded[steamid64][demoinfo.demoName]["kills"] = []
-		demosinfosloaded[steamid64][demoinfo.demoName]["wallbangs"] = []
-		demosinfosloaded[steamid64][demoinfo.demoName]["headshots"] = []
+		DemoData[steamid64][demoinfo.demoName] = {}
+		DemoData[steamid64][demoinfo.demoName]['firstTick'] = demoinfo.firstTick
+		DemoData[steamid64][demoinfo.demoName]["kills"] = []
+		DemoData[steamid64][demoinfo.demoName]["wallbangs"] = []
+		DemoData[steamid64][demoinfo.demoName]["headshots"] = []
+		DemoData[steamid64][demoinfo.demoName]["teamkills"] = []
 		for kill in demoinfo.kills:
-			demosinfosloaded[steamid64][demoinfo.demoName]["kills"].append(kill)
+			DemoData[steamid64][demoinfo.demoName]["kills"].append(kill)
 		for wallbang in demoinfo.wallbangs:
-			demosinfosloaded[steamid64][demoinfo.demoName]["wallbangs"].append(wallbang)
+			DemoData[steamid64][demoinfo.demoName]["wallbangs"].append(wallbang)
 		for headshot in demoinfo.headshots:
-			demosinfosloaded[steamid64][demoinfo.demoName]["headshots"].append(headshot)
+			DemoData[steamid64][demoinfo.demoName]["headshots"].append(headshot)
 		for teamkill in demoinfo.teamkills:
-			demosinfosloaded[steamid64][demoinfo.demoName]["teamkills"].append(teamkill)
+			DemoData[steamid64][demoinfo.demoName]["teamkills"].append(teamkill)
 	with open("CsHG.json", "w+") as f:
-		f.writelines(json.dumps(demosinfosloaded,sort_keys=True, indent=4, separators=(',', ': '), cls=demoInfoEncoder))
+		f.writelines(json.dumps(DemoData,sort_keys=True, indent=4, separators=(',', ': '), cls=demoInfoEncoder))
 
 #####################################################################################
 
@@ -371,7 +368,40 @@ if not analyzeOnly:
 	runCSGOCommand("+snd_setmixer Dialog vol 0", csgoPath)
 	runCSGOCommand("+engine_no_focus_sleep 0", csgoPath)
 	runCSGOCommand("+snd_mute_losefocus 0", csgoPath)
-	viewDemos()
+	#viewDemos()
+	DemoData = loadJson()
+
+	teamkills = 0
+	headshots = 0
+	wallbangs = 0
+	kills = 0
+	for match in DemoData[steamid64]:
+		teamkills = teamkills + len(DemoData[steamid64][match]["teamkills"])
+		kills = kills + len(DemoData[steamid64][match]["kills"])
+		headshots = headshots + len(DemoData[steamid64][match]["headshots"])
+		wallbangs = wallbangs + len(DemoData[steamid64][match]["wallbangs"])
+
+	print "Totals: Kills: %s Headshots: %s Wallbangs: %s Teamkills: %s"  % (kills, headshots, wallbangs, teamkills)
+
+	killTicksString = "kills"
+	finalCount = kills
+	if wallbangsOnly:
+		killTicksString = "wallbangs"
+		finalCount = wallbangs
+	if teamkillsOnly:
+		killTicksString = "teamkills"
+		finalCount = teamkills
+	#if headshotOnly:
+	#	killTicksString = "headshots"
+	currentCount = 0
+	for Demo in sorted(DemoData[steamid64]):
+		firstTick = DemoData[steamid64][Demo]["firstTick"]
+		kills = DemoData[steamid64][Demo][killTicksString]
+		if len(kills) != 0:
+			print "Recording/viewing %s kill(s), recorded %s from %s" % (len(kills), currentCount, finalCount)
+			currentCount = currentCount + len(kills)
+			viewDemo(Demo, firstTick, kills)
+	print "Recorded/viewed all kills."
 
 if analyzeOnly:
 	totalKills = 0
@@ -381,10 +411,10 @@ if analyzeOnly:
 	for i in range(numOfThreads):
 		t = threading._start_new_thread(analyzeAndPrintDemo, (demofiles,))
 	
-	demosinfosloaded = loadJson()
+	DemoData = loadJson()
 	
 	alreadyAnalysed = []
-	for key in demosinfosloaded[steamid64]:
+	for key in DemoData[steamid64]:
 		print key 
 		#if key == steamid64:
 		alreadyAnalysed.append(key)
@@ -395,9 +425,9 @@ if analyzeOnly:
 
 	q.join()			
 		
-	saveJson(demosinfosloaded, demoinfos)
+	saveJson(DemoData, demoinfos)
 
-	for key, value in demosinfosloaded.items():
+	for key, value in DemoData.items():
 		print key, value
 
 threading._shutdown()

@@ -1,7 +1,8 @@
 analyzeOnly = True
 numOfThreads = 4
 recording = False
-wallbangsOnly = True
+wallbangsOnly = False
+teamkillsOnly = True
 shutdownAfterFinish = False
 debugDemoViewing = False
 
@@ -62,13 +63,15 @@ def analyzeDemo(demopath):
 	username="unknown"
 	userID = -1
 	totalDeaths = 0
-	usernameKills = 0
+	#usernameKills = 0
 	kills = []
 	wallbangs = []
 	headshots = []
-	warmup=True
-	wasWallbang=False
-	wasHeadshot=False
+	teamkills = []
+	warmup = True
+	wasWallbang = False
+	wasHeadshot = False
+	wasTeamkill = False
 	kill=False
 	firstTick = 99999999
 	for line in process.stdout:
@@ -100,6 +103,8 @@ def analyzeDemo(demopath):
 				break;
 			warmup=False;
 		elif "player_death" in line:
+			killedTeam = 0
+			killerTeam = 0
 			for line in process.stdout:
 				if "}" in line:
 					if not warmup and kill:  #we are only interested in kills outside of warmup
@@ -107,23 +112,43 @@ def analyzeDemo(demopath):
 							wallbangs.append(lastTick)
 						if wasHeadshot:
 							headshots.append(lastTick)
-						usernameKills = usernameKills + 1
+						if wasTeamkill:
+							teamkills.append(lastTick)
+						#usernameKills = usernameKills + 1
 						#print "Killed by " + username + " at tick " + str(lastTick)
 						kills.append(lastTick)
 					kill=False
-					wasWallbang=False
-					wasHeadshot=False
+					wasWallbang = False
+					wasHeadshot = False
+					wasTeamkill = False
 					break
 				elif "attacker: "+ username in line:
-					kill=True					
+					kill=True
+					for line in process.stdout:
+						if "team: CT" in line:
+							killerTeam = 1
+							break
+						elif "team: T" in line:
+							killerTeam = 2
+							break
+					if killedTeam == killerTeam:
+						wasTeamkill = True
 				elif "penetrated: 1" in line: #penetrated: 1 for wallbangs
 					wasWallbang=True
 				elif "headshot: 1" in line:
 					wasHeadshot=True
+				elif "userid" in line:
+					for line in process.stdout:
+						if "team: CT" in line:
+							killedTeam = 1
+							break
+						elif "team: T" in line:
+							killedTeam = 2
+							break
 	#print "Total kills: " + str(usernameKills) 
 	#print "First tick: " + str(firstTick)
 	#print "Last tick: " + str(lastTick)
-	return kills, firstTick, wallbangs, headshots
+	return kills, firstTick, wallbangs, headshots, teamkills
 
 def runCSGOCommand(command, csgoPath):
 	if type(command) is str:
@@ -205,7 +230,11 @@ def demoDebug(message):
 def viewDemos():
 	totalKills = 0
 	for demo in demofiles:
-		kills, firstTick, wallbangs, headshots = analyzeDemo(join(demopath,demo))
+		kills, firstTick, wallbangs, headshots, teamkills = analyzeDemo(join(demopath,demo))
+		if teamkillsOnly:
+			kills = teamkills
+		if wallbangsOnly:
+			kills = wallbangs
 		totalKills = totalKills + len(kills)
 		print "totalKills: "+ str(totalKills) + " Kills = " + str(kills) + " ("+ str(demofiles.index(demo)+1) + "/" + str(len(demofiles)) + ")Demo: " + demo
 		if len(kills) != 0:
@@ -253,16 +282,18 @@ class demoInfo:
 	kills = []
 	wallbangs = []
 	headshots = []
+	teamkills = []
 	firstTick = 0
-	def __init__(self, _demoname, _kills, _firstick, _wallbangs, _headshots):
+	def __init__(self, _demoname, _kills, _firstick, _wallbangs, _headshots, _teamkills):
 		self.demoName = _demoname
 		self.kills = _kills
 		self.firstTick = _firstick
 		self.wallbangs = _wallbangs
 		self.headshots = _headshots
+		self.teamkills = _teamkills
 
 	def __str__(self):
-		return json.dumps({self.demoName:{"firstTick": self.firstTick, "kills":self.kills, "wallbangs":self.wallbangs, "headshots":self.headshots}}, sort_keys=True, indent=4, separators=(',', ': '))
+		return json.dumps({self.demoName:{"firstTick": self.firstTick, "kills":self.kills, "wallbangs":self.wallbangs, "headshots":self.headshots, "teamkills":self.teamkills}}, sort_keys=True, indent=4, separators=(',', ': '))
 
 	def __lt__(self, other):
 		return self.demoName < other.demoName
@@ -272,8 +303,10 @@ def analyzeAndPrintDemo(demofiles):
 		demo = q.get()
 		global totalKills
 		print "("+ str(demofiles.index(demo)+1) + "/" + str(len(demofiles)) + ")Demo: " + demo+ "\n"
-		kills, firstTick, wallbangs, headshots = analyzeDemo(join(demopath,demo))
-		demoinfo = demoInfo(demo, kills, firstTick, wallbangs, headshots)
+		kills, firstTick, wallbangs, headshots, teamkills = analyzeDemo(join(demopath,demo))
+		if len(teamkills) != 0:
+			print "###########("+ str(demofiles.index(demo)+1) + "/" + str(len(demofiles)) + ")Demo: " + demo + " Teamkills: " + str(len(teamkills)) + "\n"
+		demoinfo = demoInfo(demo, kills, firstTick, wallbangs, headshots, teamkills)
 		print str(demoinfo)
 		lock.acquire()
 		try:	
@@ -313,6 +346,8 @@ def saveJson(demoinfosloaded, demoinfos):
 			demosinfosloaded[steamid64][demoinfo.demoName]["wallbangs"].append(wallbang)
 		for headshot in demoinfo.headshots:
 			demosinfosloaded[steamid64][demoinfo.demoName]["headshots"].append(headshot)
+		for teamkill in demoinfo.teamkills:
+			demosinfosloaded[steamid64][demoinfo.demoName]["teamkills"].append(teamkill)
 	with open("CsHG.json", "w+") as f:
 		f.writelines(json.dumps(demosinfosloaded,sort_keys=True, indent=4, separators=(',', ': '), cls=demoInfoEncoder))
 
@@ -321,6 +356,7 @@ def saveJson(demoinfosloaded, demoinfos):
 steamid64, demoinfogoPath, csgoPath = getConfig()
 
 demopath = "E:\\Program Files (x86)\\Steam\\SteamApps\\common\\Counter-Strike Global Offensive - replays and screenshots\\csgo\\replays\\" #todo make configurable
+#demopath = "E:\\Program Files (x86)\\Steam\\SteamApps\\common\\Counter-Strike Global Offensive\\csgo\\"  #pug_de_mirage_2017-05-06_21.dem"
 demofiles = [f for f in listdir(demopath) if isfile(join(demopath, f)) and ".dem" == f[-4:]]
 
 print len(demofiles)
